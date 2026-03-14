@@ -224,6 +224,26 @@ export async function isUserDermatologist(): Promise<boolean> {
   return profile?.role === "dermatologist";
 }
 
+export async function getDermatologists(): Promise<UserProfile[]> {
+  try {
+    const usersCollection = collection(db, "users");
+    const q = query(usersCollection, where("role", "==", "dermatologist"));
+    const snapshot = await getDocs(q);
+
+    return snapshot.docs
+      .map((item) => item.data() as UserProfile)
+      .filter((profile) => !!profile.uid)
+      .sort((a, b) => {
+        const aName = (a.fullName || a.name || "").toLowerCase();
+        const bName = (b.fullName || b.name || "").toLowerCase();
+        return aName.localeCompare(bName);
+      });
+  } catch (error) {
+    console.error("[UserService] Error fetching dermatologists:", error);
+    return [];
+  }
+}
+
 /**
  * Promote user to admin (owner only)
  */

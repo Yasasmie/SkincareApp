@@ -19,6 +19,9 @@ export type ConsultationRequest = {
   uid: string;
   email: string;
   userName?: string;
+  dermatologistId: string;
+  dermatologistName: string;
+  dermatologistQualifications?: string;
   title: string;
   description: string;
   detectedConditions: string[];
@@ -41,7 +44,7 @@ export type ConsultationRequest = {
 export async function createConsultationRequest(
   data: Omit<
     ConsultationRequest,
-    "id" | "uid" | "email" | "status" | "createdAt" | "updatedAt"
+    "id" | "uid" | "email" | "userName" | "status" | "createdAt" | "updatedAt"
   >,
 ): Promise<string> {
   const user = auth.currentUser;
@@ -183,6 +186,54 @@ export async function getAllConsultations(): Promise<ConsultationRequest[]> {
     );
   } catch (error) {
     console.error("[Consultation] Error fetching all consultations:", error);
+    return [];
+  }
+}
+
+export async function getAssignedConsultations(): Promise<ConsultationRequest[]> {
+  const user = auth.currentUser;
+  if (!user) throw new Error("No user logged in");
+
+  try {
+    try {
+      const q = query(
+        collection(db, "consultations"),
+        where("dermatologistId", "==", user.uid),
+        orderBy("createdAt", "desc"),
+      );
+      const snapshot = await getDocs(q);
+
+      return snapshot.docs.map(
+        (item) =>
+          ({
+            id: item.id,
+            ...item.data(),
+          }) as ConsultationRequest,
+      );
+    } catch (indexedQueryError) {
+      console.warn(
+        "[Consultation] Assigned consultations indexed query failed, falling back:",
+        indexedQueryError,
+      );
+
+      const fallbackQuery = query(
+        collection(db, "consultations"),
+        where("dermatologistId", "==", user.uid),
+      );
+      const snapshot = await getDocs(fallbackQuery);
+
+      return snapshot.docs
+        .map(
+          (item) =>
+            ({
+              id: item.id,
+              ...item.data(),
+            }) as ConsultationRequest,
+        )
+        .sort((a, b) => b.createdAt - a.createdAt);
+    }
+  } catch (error) {
+    console.error("[Consultation] Error fetching assigned consultations:", error);
     return [];
   }
 }

@@ -1,13 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { MotionView } from "../../components/MotionView";
 import { PrimaryButton } from "../../components/PrimaryButton";
 import { useAppTheme } from "../../components/ThemeProvider";
 import { AppColors, RADIUS, SPACING } from "../../constants/theme";
 import { createConsultationRequest, getConsultationDetails, getUserConsultations, type ConsultationRequest } from "../../services/consultationService";
-import { getUserProfileSafe } from "../../services/firebaseUserService";
+import { getDermatologists, getUserProfileSafe, type UserProfile } from "../../services/firebaseUserService";
 
 export default function ConsultationScreen() {
   const router = useRouter();
@@ -23,6 +23,10 @@ export default function ConsultationScreen() {
   const [severity, setSeverity] = useState<"low" | "medium" | "high">("medium");
   const [conditions, setConditions] = useState<string[]>([]);
   const [formLoading, setFormLoading] = useState(false);
+  const [experts, setExperts] = useState<UserProfile[]>([]);
+  const [loadingExperts, setLoadingExperts] = useState(false);
+  const [selectedExpertId, setSelectedExpertId] = useState("");
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const severityOptions = ["low", "medium", "high"];
   const conditionOptions = ["Acne", "Wrinkles", "Dark Spots", "Sensitivity", "Oiliness", "Dryness", "Redness", "Pores", "Blackheads", "Other"];
@@ -61,6 +65,30 @@ export default function ConsultationScreen() {
 
     void loadConsultation();
   }, [params.consultationId]);
+
+  useEffect(() => {
+    if (mode !== "create") {
+      return;
+    }
+
+    const loadExperts = async () => {
+      try {
+        setLoadingExperts(true);
+        const dermatologistList = await getDermatologists();
+        setExperts(dermatologistList);
+
+        if (!selectedExpertId && dermatologistList.length > 0) {
+          setSelectedExpertId(dermatologistList[0].uid);
+        }
+      } catch (error) {
+        console.error("[Consultation] Failed to load experts:", error);
+      } finally {
+        setLoadingExperts(false);
+      }
+    };
+
+    void loadExperts();
+  }, [mode, selectedExpertId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -107,14 +135,29 @@ export default function ConsultationScreen() {
       Alert.alert("Validation Error", "Please select at least one condition");
       return;
     }
+    const selectedExpert = experts.find((expert) => expert.uid === selectedExpertId);
+    if (!selectedExpert) {
+      Alert.alert("Validation Error", "Please select a dermatologist.");
+      return;
+    }
     setFormLoading(true);
     try {
-      await createConsultationRequest({ title, description, detectedConditions: conditions, severity });
-      Alert.alert("Success", "Your consultation request has been submitted!", [{ text: "View Request", onPress: () => setMode("list") }]);
+      await createConsultationRequest({
+        title,
+        description,
+        detectedConditions: conditions,
+        severity,
+        dermatologistId: selectedExpert.uid,
+        dermatologistName:
+          selectedExpert.fullName || selectedExpert.name || "Dermatologist",
+        dermatologistQualifications: selectedExpert.qualifications || "",
+      });
       setTitle("");
       setDescription("");
       setSeverity("medium");
       setConditions([]);
+      setSelectedExpertId(selectedExpert.uid);
+      setShowSuccessModal(true);
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to submit request");
     } finally {
@@ -185,6 +228,14 @@ export default function ConsultationScreen() {
               <Text style={styles.urgentChip}>Urgent</Text>
             ) : null}
           </View>
+
+          <Text style={styles.detailSectionTitle}>Selected Expert</Text>
+          <Text style={styles.detailSectionText}>
+            {selectedConsultation.dermatologistName}
+            {selectedConsultation.dermatologistQualifications
+              ? ` - ${selectedConsultation.dermatologistQualifications}`
+              : ""}
+          </Text>
 
           <Text style={styles.detailSectionTitle}>Your Description</Text>
           <Text style={styles.detailSectionText}>
@@ -259,6 +310,9 @@ export default function ConsultationScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.cardTitle}>{item.title}</Text>
                     <Text style={styles.cardDate}>{new Date(item.createdAt).toLocaleDateString()}</Text>
+                    <Text style={styles.cardMetaText}>
+                      Expert: {item.dermatologistName}
+                    </Text>
                   </View>
                   <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + "20" }]}>
                     <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
@@ -300,63 +354,163 @@ export default function ConsultationScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <MotionView style={styles.header}>
-        <TouchableOpacity onPress={() => setMode("list")}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Request Consultation</Text>
-        <View style={{ width: 24 }} />
-      </MotionView>
-      <MotionView delay={50} style={styles.formContent}>
-        <View style={styles.section}>
-          <Text style={styles.label}>Title *</Text>
-          <TextInput style={styles.input} placeholder="Brief description of your concern" placeholderTextColor={colors.textSecondary} value={title} onChangeText={setTitle} editable={!formLoading} />
-        </View>
-        <View style={styles.section}>
-          <Text style={styles.label}>Detailed Description *</Text>
-          <TextInput style={[styles.input, styles.textarea]} placeholder="Please describe your skin issue in detail..." placeholderTextColor={colors.textSecondary} value={description} onChangeText={setDescription} multiline numberOfLines={5} editable={!formLoading} textAlignVertical="top" />
-        </View>
-        <View style={styles.section}>
-          <Text style={styles.label}>Affected Conditions *</Text>
-          <View style={styles.conditionsGrid}>
-            {conditionOptions.map((condition) => (
-              <TouchableOpacity
-                key={condition}
-                style={[styles.conditionCheckbox, conditions.includes(condition) && styles.conditionCheckboxActive]}
-                onPress={() => setConditions((prev) => prev.includes(condition) ? prev.filter((c) => c !== condition) : [...prev, condition])}
-                disabled={formLoading}
-              >
-                <Text style={[styles.conditionLabel, conditions.includes(condition) && styles.conditionLabelActive]}>{condition}</Text>
-              </TouchableOpacity>
-            ))}
+    <View style={styles.container}>
+      <ScrollView style={styles.container}>
+        <MotionView style={styles.header}>
+          <TouchableOpacity onPress={() => setMode("list")}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Request Consultation</Text>
+          <View style={{ width: 24 }} />
+        </MotionView>
+        <MotionView delay={50} style={styles.formContent}>
+          <View style={styles.section}>
+            <Text style={styles.label}>Choose Dermatologist *</Text>
+            {loadingExperts ? (
+              <View style={styles.inlineLoader}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={styles.inlineLoaderText}>Loading registered experts...</Text>
+              </View>
+            ) : experts.length === 0 ? (
+              <View style={styles.expertEmptyState}>
+                <Text style={styles.expertEmptyTitle}>No dermatologists available</Text>
+                <Text style={styles.expertEmptyText}>
+                  Please register a dermatologist account first.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.expertList}>
+                {experts.map((expert) => {
+                  const isSelected = selectedExpertId === expert.uid;
+                  const displayName =
+                    expert.fullName || expert.name || "Dermatologist";
+
+                  return (
+                    <TouchableOpacity
+                      key={expert.uid}
+                      style={[
+                        styles.expertCard,
+                        isSelected && styles.expertCardSelected,
+                      ]}
+                      onPress={() => setSelectedExpertId(expert.uid)}
+                      disabled={formLoading}
+                    >
+                      <View style={styles.expertCardHeader}>
+                        <View style={styles.expertAvatar}>
+                          <Ionicons
+                            name="medkit-outline"
+                            size={18}
+                            color={isSelected ? "#FFF" : colors.primary}
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            style={[
+                              styles.expertName,
+                              isSelected && styles.expertNameSelected,
+                            ]}
+                          >
+                            {displayName}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.expertQualifications,
+                              isSelected && styles.expertQualificationsSelected,
+                            ]}
+                          >
+                            {expert.qualifications || "Dermatologist"}
+                          </Text>
+                        </View>
+                        <Ionicons
+                          name={isSelected ? "radio-button-on" : "radio-button-off"}
+                          size={20}
+                          color={isSelected ? "#FFF" : colors.textSecondary}
+                        />
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
           </View>
-        </View>
-        <View style={styles.section}>
-          <Text style={styles.label}>Severity Level *</Text>
-          <View style={styles.severityContainer}>
-            {severityOptions.map((option) => (
-              <TouchableOpacity key={option} style={[styles.severityButton, severity === option && styles.severityButtonActive]} onPress={() => setSeverity(option as any)} disabled={formLoading}>
-                <Text style={[styles.severityText, severity === option && styles.severityTextActive]}>{option.charAt(0).toUpperCase() + option.slice(1)}</Text>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.section}>
+            <Text style={styles.label}>Title *</Text>
+            <TextInput style={styles.input} placeholder="Brief description of your concern" placeholderTextColor={colors.textSecondary} value={title} onChangeText={setTitle} editable={!formLoading} />
           </View>
-        </View>
-        <View style={styles.infoBox}>
-          <Ionicons name="information-circle" size={20} color={colors.primary} />
-          <View style={styles.infoContent}>
-            <Text style={styles.infoTitle}>Expert Review Assist</Text>
-            <Text style={styles.infoText}>Our dermatology experts will review your case and provide personalized recommendations within 24 hours.</Text>
+          <View style={styles.section}>
+            <Text style={styles.label}>Detailed Description *</Text>
+            <TextInput style={[styles.input, styles.textarea]} placeholder="Please describe your skin issue in detail..." placeholderTextColor={colors.textSecondary} value={description} onChangeText={setDescription} multiline numberOfLines={5} editable={!formLoading} textAlignVertical="top" />
           </View>
+          <View style={styles.section}>
+            <Text style={styles.label}>Affected Conditions *</Text>
+            <View style={styles.conditionsGrid}>
+              {conditionOptions.map((condition) => (
+                <TouchableOpacity
+                  key={condition}
+                  style={[styles.conditionCheckbox, conditions.includes(condition) && styles.conditionCheckboxActive]}
+                  onPress={() => setConditions((prev) => prev.includes(condition) ? prev.filter((c) => c !== condition) : [...prev, condition])}
+                  disabled={formLoading}
+                >
+                  <Text style={[styles.conditionLabel, conditions.includes(condition) && styles.conditionLabelActive]}>{condition}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+          <View style={styles.section}>
+            <Text style={styles.label}>Severity Level *</Text>
+            <View style={styles.severityContainer}>
+              {severityOptions.map((option) => (
+                <TouchableOpacity key={option} style={[styles.severityButton, severity === option && styles.severityButtonActive]} onPress={() => setSeverity(option as any)} disabled={formLoading}>
+                  <Text style={[styles.severityText, severity === option && styles.severityTextActive]}>{option.charAt(0).toUpperCase() + option.slice(1)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+          <View style={styles.infoBox}>
+            <Ionicons name="information-circle" size={20} color={colors.primary} />
+            <View style={styles.infoContent}>
+              <Text style={styles.infoTitle}>Expert Review Assist</Text>
+              <Text style={styles.infoText}>Our dermatology experts will review your case and provide personalized recommendations within 24 hours.</Text>
+            </View>
+          </View>
+        </MotionView>
+        <MotionView delay={100} style={styles.footer}>
+          <PrimaryButton title={formLoading ? "Submitting..." : "Submit Consultation"} onPress={handleSubmit} disabled={formLoading} />
+          <TouchableOpacity onPress={() => setMode("list")} disabled={formLoading}>
+            <Text style={styles.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </MotionView>
+      </ScrollView>
+
+      <Modal
+        visible={showSuccessModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSuccessModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <MotionView style={styles.successModal}>
+            <View style={styles.successIconWrap}>
+              <Ionicons name="checkmark-circle" size={34} color="#FFF" />
+            </View>
+            <Text style={styles.successTitle}>Consultation Submitted</Text>
+            <Text style={styles.successText}>
+              Your consultation was submitted successfully. Your selected dermatologist will review it soon.
+            </Text>
+            <PrimaryButton
+              title="View Request"
+              onPress={() => {
+                setShowSuccessModal(false);
+                setMode("list");
+              }}
+            />
+            <TouchableOpacity onPress={() => setShowSuccessModal(false)}>
+              <Text style={styles.successSecondary}>Stay Here</Text>
+            </TouchableOpacity>
+          </MotionView>
         </View>
-      </MotionView>
-      <MotionView delay={100} style={styles.footer}>
-        <PrimaryButton title={formLoading ? "Submitting..." : "Submit Consultation"} onPress={handleSubmit} disabled={formLoading} />
-        <TouchableOpacity onPress={() => setMode("list")} disabled={formLoading}>
-          <Text style={styles.cancelText}>Cancel</Text>
-        </TouchableOpacity>
-      </MotionView>
-    </ScrollView>
+      </Modal>
+    </View>
   );
 }
 
@@ -372,6 +526,7 @@ const createStyles = (colors: AppColors) =>
     cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: SPACING.m },
     cardTitle: { fontSize: 15, fontWeight: "600", color: colors.text },
     cardDate: { fontSize: 12, color: colors.textSecondary, marginTop: 4 },
+    cardMetaText: { fontSize: 12, color: colors.textSecondary, marginTop: 4 },
     statusBadge: { flexDirection: "row", alignItems: "center", paddingHorizontal: SPACING.m, paddingVertical: SPACING.s, borderRadius: RADIUS.m },
     statusText: { fontSize: 11, fontWeight: "600" },
     cardDescription: { fontSize: 13, color: colors.textSecondary, lineHeight: 18, marginBottom: SPACING.m },
@@ -390,6 +545,77 @@ const createStyles = (colors: AppColors) =>
     createButtonText: { color: "#FFF", fontWeight: "600", fontSize: 14 },
     formContent: { paddingHorizontal: SPACING.l, paddingVertical: SPACING.m },
     section: { marginBottom: SPACING.xl },
+    inlineLoader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: SPACING.s,
+      paddingVertical: SPACING.s,
+    },
+    inlineLoaderText: {
+      color: colors.textSecondary,
+      fontSize: 13,
+    },
+    expertEmptyState: {
+      backgroundColor: colors.surface,
+      borderRadius: RADIUS.m,
+      padding: SPACING.m,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    expertEmptyTitle: {
+      color: colors.text,
+      fontWeight: "700",
+      fontSize: 14,
+    },
+    expertEmptyText: {
+      color: colors.textSecondary,
+      marginTop: SPACING.s,
+      lineHeight: 18,
+    },
+    expertList: {
+      gap: SPACING.m,
+    },
+    expertCard: {
+      backgroundColor: colors.surface,
+      borderRadius: RADIUS.m,
+      padding: SPACING.m,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    expertCardSelected: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    expertCardHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: SPACING.m,
+    },
+    expertAvatar: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      backgroundColor: colors.primary + "14",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    expertName: {
+      color: colors.text,
+      fontWeight: "700",
+      fontSize: 15,
+    },
+    expertNameSelected: {
+      color: "#FFF",
+    },
+    expertQualifications: {
+      color: colors.textSecondary,
+      marginTop: 4,
+      fontSize: 12,
+      lineHeight: 18,
+    },
+    expertQualificationsSelected: {
+      color: "rgba(255,255,255,0.85)",
+    },
     label: { fontSize: 14, fontWeight: "600", color: colors.text, marginBottom: SPACING.m },
     input: { borderWidth: 1, borderColor: colors.border, borderRadius: RADIUS.m, paddingHorizontal: SPACING.m, paddingVertical: SPACING.m, fontSize: 14, color: colors.text, backgroundColor: colors.surface },
     textarea: { minHeight: 120, paddingTop: SPACING.m },
@@ -482,5 +708,56 @@ const createStyles = (colors: AppColors) =>
       flex: 1,
       color: colors.textSecondary,
       lineHeight: 20,
+    },
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: "rgba(9, 16, 24, 0.45)",
+      justifyContent: "center",
+      alignItems: "center",
+      padding: SPACING.l,
+    },
+    successModal: {
+      width: "100%",
+      maxWidth: 380,
+      backgroundColor: colors.card,
+      borderRadius: RADIUS.l,
+      padding: SPACING.xl,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: "center",
+    },
+    successIconWrap: {
+      width: 68,
+      height: 68,
+      borderRadius: 34,
+      backgroundColor: colors.primary,
+      justifyContent: "center",
+      alignItems: "center",
+      marginBottom: SPACING.l,
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.24,
+      shadowRadius: 18,
+      elevation: 8,
+    },
+    successTitle: {
+      fontSize: 22,
+      fontWeight: "700",
+      color: colors.text,
+      textAlign: "center",
+    },
+    successText: {
+      marginTop: SPACING.m,
+      marginBottom: SPACING.l,
+      fontSize: 14,
+      lineHeight: 22,
+      color: colors.textSecondary,
+      textAlign: "center",
+    },
+    successSecondary: {
+      marginTop: SPACING.s,
+      fontSize: 14,
+      fontWeight: "600",
+      color: colors.textSecondary,
     },
   });

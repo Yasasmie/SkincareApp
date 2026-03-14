@@ -19,7 +19,7 @@ import { useAppTheme } from "../../components/ThemeProvider";
 import { AppColors, RADIUS, SPACING } from "../../constants/theme";
 import { auth } from "../../firebaseConfig";
 import {
-  getAllConsultations,
+  getAssignedConsultations,
   respondToConsultation,
   type ConsultationRequest,
 } from "../../services/consultationService";
@@ -48,13 +48,16 @@ export default function ExpertDashboardScreen() {
 
       const profile = await getUserProfileSafe();
       if (profile.role !== "dermatologist") {
-        Alert.alert("Access Denied", "Only dermatologist accounts can view this dashboard.");
+        Alert.alert(
+          "Access Denied",
+          "Only dermatologist accounts can view this dashboard.",
+        );
         router.replace("/dashboard/home");
         return;
       }
 
       setExpertName(profile.fullName || profile.name || "Dermatologist");
-      setConsultations(await getAllConsultations());
+      setConsultations(await getAssignedConsultations());
     } catch (error) {
       console.error("[ExpertDashboard] Failed to load:", error);
       Alert.alert("Error", "Failed to load consultation requests.");
@@ -123,7 +126,8 @@ export default function ExpertDashboardScreen() {
           <Text style={styles.heroEyebrow}>Expert Dashboard</Text>
           <Text style={styles.heroTitle}>{expertName}</Text>
           <Text style={styles.heroSubtitle}>
-            Review patient consultation requests and reply directly from here.
+            Review the consultation requests assigned to you and reply directly
+            from here.
           </Text>
         </View>
         <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
@@ -134,7 +138,7 @@ export default function ExpertDashboardScreen() {
       <View style={styles.summaryRow}>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryNumber}>{consultations.length}</Text>
-          <Text style={styles.summaryLabel}>Total Requests</Text>
+          <Text style={styles.summaryLabel}>Assigned Requests</Text>
         </View>
         <View style={styles.summaryCard}>
           <Text style={styles.summaryNumber}>
@@ -156,10 +160,14 @@ export default function ExpertDashboardScreen() {
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Ionicons name="medkit-outline" size={42} color={colors.textSecondary} />
-            <Text style={styles.emptyTitle}>No consultation requests yet</Text>
+            <Ionicons
+              name="medkit-outline"
+              size={42}
+              color={colors.textSecondary}
+            />
+            <Text style={styles.emptyTitle}>No assigned consultations yet</Text>
             <Text style={styles.emptyText}>
-              New patient requests will appear here for dermatologist review.
+              Patient requests sent to you will appear here.
             </Text>
           </View>
         }
@@ -173,10 +181,18 @@ export default function ExpertDashboardScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.requestTitle}>{item.title}</Text>
                   <Text style={styles.requestMeta}>
-                    {item.userName || "User"} · {item.email}
+                    {item.userName || "User"} | {item.email}
+                  </Text>
+                  <Text style={styles.requestMeta}>
+                    Assigned expert: {item.dermatologistName}
                   </Text>
                 </View>
-                <View style={[styles.statusBadge, { backgroundColor: statusColor + "20" }]}>
+                <View
+                  style={[
+                    styles.statusBadge,
+                    { backgroundColor: statusColor + "20" },
+                  ]}
+                >
                   <Text style={[styles.statusText, { color: statusColor }]}>
                     {item.status}
                   </Text>
@@ -185,7 +201,9 @@ export default function ExpertDashboardScreen() {
 
               <View style={styles.metaRow}>
                 <Text style={styles.metaChip}>Severity: {item.severity}</Text>
-                {item.isUrgent ? <Text style={styles.urgentChip}>Urgent</Text> : null}
+                {item.isUrgent ? (
+                  <Text style={styles.urgentChip}>Urgent</Text>
+                ) : null}
                 <Text style={styles.metaChip}>
                   {new Date(item.createdAt).toLocaleDateString()}
                 </Text>
@@ -197,7 +215,10 @@ export default function ExpertDashboardScreen() {
               <Text style={styles.sectionLabel}>Detected Conditions</Text>
               <View style={styles.conditionRow}>
                 {item.detectedConditions.map((condition) => (
-                  <View key={`${item.id}-${condition}`} style={styles.conditionChip}>
+                  <View
+                    key={`${item.id}-${condition}`}
+                    style={styles.conditionChip}
+                  >
                     <Text style={styles.conditionChipText}>{condition}</Text>
                   </View>
                 ))}
@@ -247,7 +268,11 @@ export default function ExpertDashboardScreen() {
                     setReplyText(item.response || "");
                   }}
                 >
-                  <Ionicons name="chatbubble-ellipses-outline" size={18} color="#FFF" />
+                  <Ionicons
+                    name="chatbubble-ellipses-outline"
+                    size={18}
+                    color="#FFF"
+                  />
                   <Text style={styles.replyButtonText}>
                     {item.response ? "Update Reply" : "Reply to Request"}
                   </Text>

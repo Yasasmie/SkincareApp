@@ -29,8 +29,14 @@ service cloud.firestore {
         currentUserDoc().data.role == "dermatologist";
     }
 
+    function isAssignedDermatologist() {
+      return isDermatologist() &&
+        resource.data.dermatologistId == request.auth.uid;
+    }
+
     match /users/{uid} {
-      allow read: if isOwner(uid) || isAdmin();
+      allow read: if isOwner(uid) || isAdmin() ||
+        (isAuthenticated() && resource.data.role == "dermatologist");
       allow create: if isOwner(uid) || isAdmin();
       allow update: if isAdmin() || (
         isOwner(uid) &&
@@ -55,15 +61,17 @@ service cloud.firestore {
 
     match /consultations/{consultationId} {
       allow read: if isAdmin() ||
-        isDermatologist() ||
+        isAssignedDermatologist() ||
         (isAuthenticated() && resource.data.uid == request.auth.uid);
 
       allow create: if isAuthenticated() &&
-        request.resource.data.uid == request.auth.uid;
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.dermatologistId is string &&
+        request.resource.data.dermatologistName is string;
 
       allow update: if isAdmin() ||
         (
-          isDermatologist() &&
+          isAssignedDermatologist() &&
           request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly([
               "response",
