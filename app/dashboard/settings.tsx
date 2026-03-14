@@ -24,6 +24,8 @@ export default function SettingsScreen() {
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
   const [skinType, setSkinType] = useState("Normal");
+  const [role, setRole] = useState<"user" | "dermatologist">("user");
+  const [qualifications, setQualifications] = useState("");
 
   useEffect(() => {
     const loadUserSettings = async () => {
@@ -40,7 +42,9 @@ export default function SettingsScreen() {
         if (snapshot.exists()) {
           const userData = snapshot.data();
           if (userData.fullName) setName(userData.fullName);
+          if (userData.role === "dermatologist") setRole("dermatologist");
           if (userData.skinType) setSkinType(userData.skinType);
+          if (userData.qualifications) setQualifications(userData.qualifications);
         }
       } catch (error) {
         console.warn("[Settings] Failed to load profile data:", error);
@@ -66,7 +70,8 @@ export default function SettingsScreen() {
         userRef,
         {
           fullName: name,
-          skinType,
+          skinType: role === "dermatologist" ? null : skinType,
+          qualifications: role === "dermatologist" ? qualifications : null,
           updatedAt: Date.now(),
         },
         { merge: true },
@@ -153,28 +158,46 @@ export default function SettingsScreen() {
           placeholderTextColor={colors.textSecondary}
         />
 
-        <Text style={styles.label}>Skin Type</Text>
-        <View style={styles.chipRow}>
-          {["Normal", "Oily", "Dry", "Combination"].map((type) => (
-            <TouchableOpacity
-              key={type}
-              style={[
-                styles.chip,
-                skinType === type && styles.chipActive,
-              ]}
-              onPress={() => setSkinType(type)}
-            >
-              <Text
-                style={[
-                  styles.chipText,
-                  skinType === type && styles.chipTextActive,
-                ]}
-              >
-                {type}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {role === "dermatologist" ? (
+          <>
+            <Text style={styles.label}>Qualifications</Text>
+            <TextInput
+              style={[styles.input, styles.textarea]}
+              value={qualifications}
+              onChangeText={setQualifications}
+              placeholder="MBBS, MD Dermatology, years of experience..."
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+          </>
+        ) : (
+          <>
+            <Text style={styles.label}>Skin Type</Text>
+            <View style={styles.chipRow}>
+              {["Normal", "Oily", "Dry", "Combination"].map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.chip,
+                    skinType === type && styles.chipActive,
+                  ]}
+                  onPress={() => setSkinType(type)}
+                >
+                  <Text
+                    style={[
+                      styles.chipText,
+                      skinType === type && styles.chipTextActive,
+                    ]}
+                  >
+                    {type}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
 
         <PrimaryButton
           title={loading ? "Saving..." : "Save Profile Changes"}
@@ -296,6 +319,10 @@ const createStyles = (colors: AppColors) =>
       paddingVertical: 14,
       color: colors.text,
       marginBottom: SPACING.m,
+    },
+    textarea: {
+      minHeight: 110,
+      paddingTop: SPACING.m,
     },
     chipRow: {
       flexDirection: "row",

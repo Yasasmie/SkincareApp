@@ -35,6 +35,7 @@ export default function ExpertDashboardScreen() {
   const [activeReplyId, setActiveReplyId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
   const [expertName, setExpertName] = useState("Dermatologist");
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -111,6 +112,32 @@ export default function ExpertDashboardScreen() {
     }
   };
 
+  const groupedConsultations = consultations.reduce<
+    {
+      uid: string;
+      userName: string;
+      email: string;
+      consultations: ConsultationRequest[];
+    }[]
+  >((groups, consultation) => {
+    const existing = groups.find((group) => group.uid === consultation.uid);
+    if (existing) {
+      existing.consultations.push(consultation);
+      return groups;
+    }
+
+    groups.push({
+      uid: consultation.uid,
+      userName: consultation.userName || "User",
+      email: consultation.email,
+      consultations: [consultation],
+    });
+    return groups;
+  }, []);
+
+  const selectedUserGroup =
+    groupedConsultations.find((group) => group.uid === selectedUserId) || null;
+
   if (loading) {
     return (
       <View style={[styles.container, styles.centered]}>
@@ -129,6 +156,15 @@ export default function ExpertDashboardScreen() {
             Review the consultation requests assigned to you and reply directly
             from here.
           </Text>
+          <View style={styles.heroActions}>
+            <TouchableOpacity
+              style={styles.heroActionButtonSecondary}
+              onPress={() => router.push("/dashboard/settings")}
+            >
+              <Ionicons name="person-outline" size={16} color="#FFF" />
+              <Text style={styles.heroActionText}>View Profile</Text>
+            </TouchableOpacity>
+          </View>
         </View>
         <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
           <Ionicons name="log-out-outline" size={20} color="#FFF" />
@@ -154,134 +190,201 @@ export default function ExpertDashboardScreen() {
         </View>
       </View>
 
-      <FlatList
-        data={consultations}
-        keyExtractor={(item) => item.id || item.createdAt.toString()}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons
-              name="medkit-outline"
-              size={42}
-              color={colors.textSecondary}
-            />
-            <Text style={styles.emptyTitle}>No assigned consultations yet</Text>
-            <Text style={styles.emptyText}>
-              Patient requests sent to you will appear here.
+      {selectedUserGroup ? (
+        <ScrollView contentContainerStyle={styles.listContent}>
+          <TouchableOpacity
+            style={styles.backToUsersButton}
+            onPress={() => {
+              setSelectedUserId(null);
+              setActiveReplyId(null);
+              setReplyText("");
+            }}
+          >
+            <Ionicons name="arrow-back" size={18} color={colors.primary} />
+            <Text style={styles.backToUsersText}>Back to Patients</Text>
+          </TouchableOpacity>
+
+          <View style={styles.userSummaryCard}>
+            <Text style={styles.userSummaryTitle}>{selectedUserGroup.userName}</Text>
+            <Text style={styles.userSummaryMeta}>{selectedUserGroup.email}</Text>
+            <Text style={styles.userSummaryMeta}>
+              {selectedUserGroup.consultations.length} consultation
+              {selectedUserGroup.consultations.length === 1 ? "" : "s"}
             </Text>
           </View>
-        }
-        renderItem={({ item }) => {
-          const isReplyOpen = activeReplyId === item.id;
-          const statusColor = getStatusColor(item.status);
 
-          return (
-            <MotionView style={styles.requestCard}>
-              <View style={styles.requestHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.requestTitle}>{item.title}</Text>
-                  <Text style={styles.requestMeta}>
-                    {item.userName || "User"} | {item.email}
-                  </Text>
-                  <Text style={styles.requestMeta}>
-                    Assigned expert: {item.dermatologistName}
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    { backgroundColor: statusColor + "20" },
-                  ]}
-                >
-                  <Text style={[styles.statusText, { color: statusColor }]}>
-                    {item.status}
-                  </Text>
-                </View>
-              </View>
+          {selectedUserGroup.consultations.map((item) => {
+            const isReplyOpen = activeReplyId === item.id;
+            const statusColor = getStatusColor(item.status);
 
-              <View style={styles.metaRow}>
-                <Text style={styles.metaChip}>Severity: {item.severity}</Text>
-                {item.isUrgent ? (
-                  <Text style={styles.urgentChip}>Urgent</Text>
-                ) : null}
-                <Text style={styles.metaChip}>
-                  {new Date(item.createdAt).toLocaleDateString()}
-                </Text>
-              </View>
-
-              <Text style={styles.sectionLabel}>Description</Text>
-              <Text style={styles.description}>{item.description}</Text>
-
-              <Text style={styles.sectionLabel}>Detected Conditions</Text>
-              <View style={styles.conditionRow}>
-                {item.detectedConditions.map((condition) => (
-                  <View
-                    key={`${item.id}-${condition}`}
-                    style={styles.conditionChip}
-                  >
-                    <Text style={styles.conditionChipText}>{condition}</Text>
+            return (
+              <MotionView key={item.id || item.createdAt} style={styles.requestCard}>
+                <View style={styles.requestHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.requestTitle}>{item.title}</Text>
+                    <Text style={styles.requestMeta}>
+                      Assigned expert: {item.dermatologistName}
+                    </Text>
                   </View>
-                ))}
-              </View>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      { backgroundColor: statusColor + "20" },
+                    ]}
+                  >
+                    <Text style={[styles.statusText, { color: statusColor }]}>
+                      {item.status}
+                    </Text>
+                  </View>
+                </View>
 
-              {item.response ? (
-                <View style={styles.responseCard}>
-                  <Text style={styles.responseHeading}>Previous Reply</Text>
-                  <Text style={styles.responseText}>{item.response}</Text>
-                  <Text style={styles.responseMeta}>
-                    {item.respondedBy || "Dermatologist"}
+                <View style={styles.metaRow}>
+                  <Text style={styles.metaChip}>Severity: {item.severity}</Text>
+                  {item.isUrgent ? (
+                    <Text style={styles.urgentChip}>Urgent</Text>
+                  ) : null}
+                  <Text style={styles.metaChip}>
+                    {new Date(item.createdAt).toLocaleDateString()}
                   </Text>
                 </View>
-              ) : null}
 
-              {isReplyOpen ? (
-                <ScrollView nestedScrollEnabled>
-                  <TextInput
-                    style={styles.replyInput}
-                    placeholder="Write your dermatologist response here..."
-                    placeholderTextColor={colors.textSecondary}
-                    multiline
-                    numberOfLines={5}
-                    value={replyText}
-                    onChangeText={setReplyText}
-                    textAlignVertical="top"
-                  />
-                  <PrimaryButton
-                    title={submittingId === item.id ? "Sending..." : "Send Reply"}
-                    onPress={() => void handleReply(item.id || "")}
-                    disabled={submittingId === item.id}
-                  />
+                <Text style={styles.sectionLabel}>Description</Text>
+                <Text style={styles.description}>{item.description}</Text>
+
+                <Text style={styles.sectionLabel}>Detected Conditions</Text>
+                <View style={styles.conditionRow}>
+                  {item.detectedConditions.map((condition) => (
+                    <View
+                      key={`${item.id}-${condition}`}
+                      style={styles.conditionChip}
+                    >
+                      <Text style={styles.conditionChipText}>{condition}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                {item.response ? (
+                  <View style={styles.responseCard}>
+                    <Text style={styles.responseHeading}>Previous Reply</Text>
+                    <Text style={styles.responseText}>{item.response}</Text>
+                    <Text style={styles.responseMeta}>
+                      {item.respondedBy || "Dermatologist"}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {isReplyOpen ? (
+                  <ScrollView nestedScrollEnabled>
+                    <TextInput
+                      style={styles.replyInput}
+                      placeholder="Write your dermatologist response here..."
+                      placeholderTextColor={colors.textSecondary}
+                      multiline
+                      numberOfLines={5}
+                      value={replyText}
+                      onChangeText={setReplyText}
+                      textAlignVertical="top"
+                    />
+                    <PrimaryButton
+                      title={submittingId === item.id ? "Sending..." : "Send Reply"}
+                      onPress={() => void handleReply(item.id || "")}
+                      disabled={submittingId === item.id}
+                    />
+                    <TouchableOpacity
+                      onPress={() => {
+                        setActiveReplyId(null);
+                        setReplyText("");
+                      }}
+                    >
+                      <Text style={styles.cancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                  </ScrollView>
+                ) : (
                   <TouchableOpacity
+                    style={styles.replyButton}
                     onPress={() => {
-                      setActiveReplyId(null);
-                      setReplyText("");
+                      setActiveReplyId(item.id || null);
+                      setReplyText(item.response || "");
                     }}
                   >
-                    <Text style={styles.cancelText}>Cancel</Text>
+                    <Ionicons
+                      name="chatbubble-ellipses-outline"
+                      size={18}
+                      color="#FFF"
+                    />
+                    <Text style={styles.replyButtonText}>
+                      {item.response ? "Update Reply" : "Reply to Request"}
+                    </Text>
                   </TouchableOpacity>
-                </ScrollView>
-              ) : (
-                <TouchableOpacity
-                  style={styles.replyButton}
-                  onPress={() => {
-                    setActiveReplyId(item.id || null);
-                    setReplyText(item.response || "");
-                  }}
-                >
+                )}
+              </MotionView>
+            );
+          })}
+        </ScrollView>
+      ) : (
+        <FlatList
+          data={groupedConsultations}
+          keyExtractor={(item) => item.uid}
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Ionicons
+                name="medkit-outline"
+                size={42}
+                color={colors.textSecondary}
+              />
+              <Text style={styles.emptyTitle}>No assigned consultations yet</Text>
+              <Text style={styles.emptyText}>
+                Patient requests sent to you will appear here.
+              </Text>
+            </View>
+          }
+          renderItem={({ item }) => {
+            const pendingCount = item.consultations.filter(
+              (consultation) => consultation.status === "pending",
+            ).length;
+            const latestConsultation = item.consultations[0];
+
+            return (
+              <TouchableOpacity
+                style={styles.patientCard}
+                onPress={() => setSelectedUserId(item.uid)}
+              >
+                <View style={styles.patientHeader}>
+                  <View style={styles.patientAvatar}>
+                    <Ionicons name="person-outline" size={20} color={colors.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.patientName}>{item.userName}</Text>
+                    <Text style={styles.patientMeta}>{item.email}</Text>
+                  </View>
                   <Ionicons
-                    name="chatbubble-ellipses-outline"
-                    size={18}
-                    color="#FFF"
+                    name="chevron-forward"
+                    size={20}
+                    color={colors.textSecondary}
                   />
-                  <Text style={styles.replyButtonText}>
-                    {item.response ? "Update Reply" : "Reply to Request"}
+                </View>
+                <View style={styles.patientStatsRow}>
+                  <Text style={styles.patientStatChip}>
+                    {item.consultations.length} consultation
+                    {item.consultations.length === 1 ? "" : "s"}
                   </Text>
-                </TouchableOpacity>
-              )}
-            </MotionView>
-          );
-        }}
-      />
+                  {pendingCount > 0 ? (
+                    <Text style={styles.patientPendingChip}>
+                      {pendingCount} pending
+                    </Text>
+                  ) : null}
+                </View>
+                {latestConsultation ? (
+                  <Text style={styles.patientPreview} numberOfLines={2}>
+                    Latest: {latestConsultation.title}
+                  </Text>
+                ) : null}
+              </TouchableOpacity>
+            );
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -322,6 +425,39 @@ const createStyles = (colors: AppColors) =>
       marginTop: SPACING.s,
       maxWidth: 280,
       lineHeight: 20,
+    },
+    heroActions: {
+      flexDirection: "row",
+      gap: SPACING.s,
+      marginTop: SPACING.l,
+      flexWrap: "wrap",
+    },
+    heroActionButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      backgroundColor: "rgba(255,255,255,0.18)",
+      paddingHorizontal: SPACING.m,
+      paddingVertical: 10,
+      borderRadius: RADIUS.round,
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.18)",
+    },
+    heroActionButtonSecondary: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      backgroundColor: "rgba(255,255,255,0.12)",
+      paddingHorizontal: SPACING.m,
+      paddingVertical: 10,
+      borderRadius: RADIUS.round,
+      borderWidth: 1,
+      borderColor: "rgba(255,255,255,0.12)",
+    },
+    heroActionText: {
+      color: "#FFF",
+      fontWeight: "700",
+      fontSize: 13,
     },
     logoutButton: {
       backgroundColor: "rgba(255,255,255,0.18)",
@@ -370,6 +506,95 @@ const createStyles = (colors: AppColors) =>
       color: colors.textSecondary,
       marginTop: SPACING.s,
       textAlign: "center",
+      lineHeight: 20,
+    },
+    backToUsersButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "flex-start",
+      gap: SPACING.s,
+      marginBottom: SPACING.m,
+    },
+    backToUsersText: {
+      color: colors.primary,
+      fontWeight: "700",
+    },
+    userSummaryCard: {
+      backgroundColor: colors.card,
+      borderRadius: RADIUS.l,
+      padding: SPACING.l,
+      marginBottom: SPACING.m,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    userSummaryTitle: {
+      color: colors.text,
+      fontSize: 20,
+      fontWeight: "700",
+    },
+    userSummaryMeta: {
+      color: colors.textSecondary,
+      marginTop: 4,
+    },
+    patientCard: {
+      backgroundColor: colors.card,
+      borderRadius: RADIUS.l,
+      padding: SPACING.l,
+      marginBottom: SPACING.m,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    patientHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: SPACING.m,
+    },
+    patientAvatar: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      justifyContent: "center",
+      alignItems: "center",
+      backgroundColor: colors.primary + "14",
+    },
+    patientName: {
+      color: colors.text,
+      fontSize: 16,
+      fontWeight: "700",
+    },
+    patientMeta: {
+      color: colors.textSecondary,
+      marginTop: 2,
+      fontSize: 12,
+    },
+    patientStatsRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: SPACING.s,
+      marginTop: SPACING.m,
+    },
+    patientStatChip: {
+      backgroundColor: colors.surface,
+      color: colors.textSecondary,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+      fontSize: 12,
+      overflow: "hidden",
+    },
+    patientPendingChip: {
+      backgroundColor: "#FFF3BF",
+      color: "#A66B00",
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+      fontSize: 12,
+      fontWeight: "700",
+      overflow: "hidden",
+    },
+    patientPreview: {
+      color: colors.textSecondary,
+      marginTop: SPACING.m,
       lineHeight: 20,
     },
     requestCard: {
