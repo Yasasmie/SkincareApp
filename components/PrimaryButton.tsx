@@ -5,7 +5,8 @@ import {
     Text,
     TouchableOpacity,
 } from "react-native";
-import { COLORS, RADIUS, SPACING } from "../constants/theme";
+import { RADIUS, SPACING } from "../constants/theme";
+import { useAppTheme } from "./ThemeProvider";
 
 type Props = {
   title: string;
@@ -22,8 +23,10 @@ export function PrimaryButton({
   loading,
   disabled,
 }: Props) {
+  const { colors } = useAppTheme();
   const isPrimary = variant === "primary";
   const isDisabled = loading || disabled;
+  const styles = createStyles(colors);
 
   return (
     <TouchableOpacity
@@ -37,7 +40,7 @@ export function PrimaryButton({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={isPrimary ? "#FFF" : COLORS.primary} />
+        <ActivityIndicator color={isPrimary ? "#FFF" : colors.primary} />
       ) : (
         <Text
           style={[
@@ -52,27 +55,28 @@ export function PrimaryButton({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ReturnType<typeof useAppTheme>["colors"]) =>
+  StyleSheet.create({
   button: {
     height: 56,
     borderRadius: RADIUS.round,
     justifyContent: "center",
     alignItems: "center",
     marginVertical: SPACING.s,
-    shadowColor: COLORS.primary,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 4,
   },
-  primary: { backgroundColor: COLORS.primary },
+  primary: { backgroundColor: colors.primary },
   secondary: {
-    backgroundColor: COLORS.card,
+    backgroundColor: colors.card,
     borderWidth: 1,
-    borderColor: COLORS.primary,
+    borderColor: colors.primary,
   },
   text: { fontSize: 16, fontWeight: "700", letterSpacing: 0.5 },
   textPrimary: { color: "#FFF" },
-  textSecondary: { color: COLORS.primary },
+  textSecondary: { color: colors.primary },
   disabled: { opacity: 0.5 },
 });

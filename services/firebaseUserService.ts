@@ -9,6 +9,7 @@ import {
     updateDoc,
     where,
 } from "firebase/firestore";
+import { Platform } from "react-native";
 import { getDownloadURL, getStorage, ref, uploadBytes } from "firebase/storage";
 import { app, auth, db } from "../firebaseConfig";
 
@@ -21,6 +22,7 @@ export type UserProfile = {
   skinType?: "oily" | "dry" | "combination" | "normal" | "sensitive";
   skinConcerns?: string[];
   photoURL?: string;
+  photoData?: string;
   createdAt: number;
   updatedAt: number;
   isAdmin?: boolean;
@@ -226,11 +228,54 @@ export async function uploadAndSaveProfileImage(uri: string): Promise<string> {
   if (!user) throw new Error("No user logged in");
 
   try {
+    const isWeb = Platform.OS === "web";
+
+    // Avoid Firebase Storage CORS failures on web by persisting a data URL directly.
+    if (isWeb) {
+      let dataUrl = uri;
+
+      if (!uri.startsWith("data:")) {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onerror = () => reject(new Error("Failed to read image file"));
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      try {
+        const userRef = doc(db, "users", user.uid);
+        await setDoc(
+          userRef,
+          {
+            uid: user.uid,
+            email: user.email || "",
+            name: user.displayName || "User",
+            photoData: dataUrl,
+            photoURL: null,
+            updatedAt: Date.now(),
+          },
+          { merge: true },
+        );
+      } catch (firestoreErr) {
+        console.warn(
+          "[UserService] Failed to save web profile image to Firestore:",
+          firestoreErr,
+        );
+        throw firestoreErr;
+      }
+
+      console.log("[UserService] Saved profile image as web dataURL");
+      return dataUrl;
+    }
+
     const storage = getStorage(app);
     const fileName = `users/${user.uid}/profile_${Date.now()}.jpg`;
     const storageRef = ref(storage, fileName);
 
-    // Fetch the file as blob (works for web and RN)
+    // Fetch the file as blob (native path)
     const response = await fetch(uri);
     const blob = await response.blob();
 
@@ -240,7 +285,6 @@ export async function uploadAndSaveProfileImage(uri: string): Promise<string> {
 
       // Update Firebase Auth profile
       try {
-        // lazy import to avoid circular issues
         const { updateProfile } = await import("firebase/auth");
         await updateProfile(user, { photoURL: downloadUrl });
       } catch (authErr) {
@@ -255,6 +299,7 @@ export async function uploadAndSaveProfileImage(uri: string): Promise<string> {
         const userRef = doc(db, "users", user.uid);
         await updateDoc(userRef, {
           photoURL: downloadUrl,
+          photoData: null,
           updatedAt: Date.now(),
         });
       } catch (fsErr) {
@@ -270,59 +315,10 @@ export async function uploadAndSaveProfileImage(uri: string): Promise<string> {
       );
       return downloadUrl;
     } catch (uploadErr: any) {
-      // Common cause on web: missing CORS config on Firebase Storage bucket.
       console.warn(
-        "[UserService] Storage upload failed (possible CORS). Falling back to saving dataURL in Firestore:",
+        "[UserService] Storage upload failed:",
         uploadErr,
       );
-
-      // If running in a browser, convert blob to data URL and save to Firestore
-      const isWeb = typeof window !== "undefined" && !!window.document;
-      if (isWeb) {
-        try {
-          const dataUrl: string = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onerror = () => reject(new Error("Failed to read blob"));
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.readAsDataURL(blob);
-          });
-
-          // Update Auth profile with data URL (so UI shows it)
-          try {
-            const { updateProfile } = await import("firebase/auth");
-            await updateProfile(user, { photoURL: dataUrl });
-          } catch (authErr) {
-            console.warn(
-              "[UserService] Failed to update Auth profile with dataURL:",
-              authErr,
-            );
-          }
-
-          // Save dataURL into Firestore user doc under `photoData`
-          try {
-            const userRef = doc(db, "users", user.uid);
-            await updateDoc(userRef, {
-              photoData: dataUrl,
-              updatedAt: Date.now(),
-            });
-          } catch (fsErr) {
-            console.warn(
-              "[UserService] Failed to save dataURL to Firestore:",
-              fsErr,
-            );
-          }
-
-          return dataUrl;
-        } catch (convErr) {
-          console.error(
-            "[UserService] Failed to convert blob to dataURL fallback:",
-            convErr,
-          );
-          throw uploadErr;
-        }
-      }
-
-      // Not web or fallback failed: rethrow original upload error
       throw uploadErr;
     }
 

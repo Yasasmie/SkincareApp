@@ -1,32 +1,41 @@
-// app/auth/login.tsx
-import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../../firebaseConfig';
-import { COLORS, SPACING, RADIUS } from '../../constants/theme';
-import { PrimaryButton } from '../../components/PrimaryButton';
-import { MotionView } from '../../components/MotionView';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import React, { useState } from "react";
+import {
+  Alert,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { MotionView } from "../../components/MotionView";
+import { PrimaryButton } from "../../components/PrimaryButton";
+import { useAppTheme } from "../../components/ThemeProvider";
+import { AppColors, RADIUS, SPACING } from "../../constants/theme";
+import { auth } from "../../firebaseConfig";
 
 export default function LoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please enter both email and password.');
+      Alert.alert("Error", "Please enter both email and password.");
       return;
     }
 
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      router.replace('/dashboard/home'); // navigates to dashboard/home.tsx
+      router.replace("/dashboard/home");
     } catch (error: any) {
-      Alert.alert('Login Failed', error.message);
+      Alert.alert("Login Failed", error.message);
     } finally {
       setLoading(false);
     }
@@ -36,13 +45,15 @@ export default function LoginScreen() {
     <View style={styles.container}>
       <View style={styles.circle1} />
 
-      <MotionView style={{ width: '100%' }}>
+      <MotionView style={{ width: "100%" }}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
 
         <Text style={styles.header}>Welcome Back</Text>
-        <Text style={styles.subHeader}>Sign in to continue your skincare journey.</Text>
+        <Text style={styles.subHeader}>
+          Sign in to continue your skincare journey.
+        </Text>
       </MotionView>
 
       <MotionView delay={100} style={styles.form}>
@@ -51,7 +62,7 @@ export default function LoginScreen() {
           <TextInput
             style={styles.input}
             placeholder="hello@example.com"
-            placeholderTextColor="#999"
+            placeholderTextColor={colors.textSecondary}
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
@@ -62,9 +73,9 @@ export default function LoginScreen() {
           <Text style={styles.label}>Password</Text>
           <TextInput
             style={styles.input}
-            placeholder="••••••••"
+            placeholder="Password"
             secureTextEntry
-            placeholderTextColor="#999"
+            placeholderTextColor={colors.textSecondary}
             value={password}
             onChangeText={setPassword}
           />
@@ -75,12 +86,12 @@ export default function LoginScreen() {
         </View>
 
         <TouchableOpacity
-          onPress={() => router.push('/auth/register')}
+          onPress={() => router.push("/auth/register")}
           style={styles.footerLink}
         >
-          <Text style={{ color: COLORS.textLight }}>
-            Don't have an account?{' '}
-            <Text style={{ fontWeight: 'bold', color: COLORS.primary }}>Sign Up</Text>
+          <Text style={styles.footerText}>
+            Don&apos;t have an account?{" "}
+            <Text style={styles.footerAccent}>Sign Up</Text>
           </Text>
         </TouchableOpacity>
       </MotionView>
@@ -88,52 +99,67 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-    padding: SPACING.l,
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  circle1: {
-    position: 'absolute',
-    top: -50,
-    right: -50,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: COLORS.secondary,
-    opacity: 0.3,
-  },
-  backButton: { alignSelf: 'flex-start', marginBottom: SPACING.m },
-  header: { fontSize: 32, fontWeight: 'bold', color: COLORS.text, letterSpacing: -0.5 },
-  subHeader: {
-    fontSize: 16,
-    color: COLORS.textLight,
-    marginTop: SPACING.s,
-    marginBottom: SPACING.xl,
-  },
-  form: {
-    backgroundColor: COLORS.card,
-    padding: SPACING.l,
-    borderRadius: RADIUS.l,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-  },
-  inputContainer: { marginBottom: SPACING.m },
-  label: { fontSize: 14, color: COLORS.text, marginBottom: 8, fontWeight: '600' },
-  input: {
-    backgroundColor: COLORS.background,
-    borderRadius: RADIUS.s,
-    padding: SPACING.m,
-    fontSize: 16,
-    color: COLORS.text,
-    borderWidth: 1,
-    borderColor: '#EFEFEF',
-  },
-  footerLink: { alignSelf: 'center', marginTop: 20, padding: 10 },
-});
+const createStyles = (colors: AppColors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+      padding: SPACING.l,
+      justifyContent: "center",
+      overflow: "hidden",
+    },
+    circle1: {
+      position: "absolute",
+      top: -50,
+      right: -50,
+      width: 200,
+      height: 200,
+      borderRadius: 100,
+      backgroundColor: colors.secondary,
+      opacity: 0.35,
+    },
+    backButton: { alignSelf: "flex-start", marginBottom: SPACING.m },
+    header: {
+      fontSize: 32,
+      fontWeight: "bold",
+      color: colors.text,
+      letterSpacing: -0.5,
+    },
+    subHeader: {
+      fontSize: 16,
+      color: colors.textLight,
+      marginTop: SPACING.s,
+      marginBottom: SPACING.xl,
+    },
+    form: {
+      backgroundColor: colors.card,
+      padding: SPACING.l,
+      borderRadius: RADIUS.l,
+      elevation: 4,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.12,
+      shadowRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    inputContainer: { marginBottom: SPACING.m },
+    label: {
+      fontSize: 14,
+      color: colors.text,
+      marginBottom: 8,
+      fontWeight: "600",
+    },
+    input: {
+      backgroundColor: colors.surface,
+      borderRadius: RADIUS.s,
+      padding: SPACING.m,
+      fontSize: 16,
+      color: colors.text,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    footerLink: { alignSelf: "center", marginTop: 20, padding: 10 },
+    footerText: { color: colors.textLight },
+    footerAccent: { fontWeight: "bold", color: colors.primary },
+  });

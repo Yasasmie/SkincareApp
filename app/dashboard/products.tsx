@@ -1,21 +1,17 @@
-// app/dashboard/products.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from "react-native";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { MotionView } from "../../components/MotionView";
-import { COLORS, RADIUS, SPACING } from "../../constants/theme";
+import { useAppTheme } from "../../components/ThemeProvider";
+import { AppColors, RADIUS, SPACING } from "../../constants/theme";
 import { getUserAnalysisHistory } from "../../services/analysisHistoryService";
 import { getRecommendation } from "../../services/diseaseRoutineService";
 
 export default function ProductsScreen() {
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = createStyles(colors);
   const [primaryRec, setPrimaryRec] = useState<any | null>(null);
 
   useEffect(() => {
@@ -30,8 +26,7 @@ export default function ProductsScreen() {
             last.detectedConditions && last.detectedConditions.length > 0
               ? last.detectedConditions[0]
               : "healthy";
-          const rec = getRecommendation(primaryDisease);
-          setPrimaryRec(rec);
+          setPrimaryRec(getRecommendation(primaryDisease));
         } else {
           setPrimaryRec(getRecommendation("healthy"));
         }
@@ -41,20 +36,17 @@ export default function ProductsScreen() {
       }
     };
 
-    load();
+    void load();
     return () => {
       mounted = false;
     };
   }, []);
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={{ padding: SPACING.l }}
-    >
+    <ScrollView style={styles.container} contentContainerStyle={{ padding: SPACING.l }}>
       <View style={styles.headerRow}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={20} color={COLORS.text} />
+          <Ionicons name="arrow-back" size={20} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Products from Last Analysis</Text>
       </View>
@@ -62,11 +54,11 @@ export default function ProductsScreen() {
       <MotionView delay={100}>
         <Text style={styles.sectionTitle}>Products to Avoid</Text>
         <View style={styles.card}>
-          {primaryRec && primaryRec.avoid && primaryRec.avoid.length > 0 ? (
+          {primaryRec?.avoid?.length ? (
             primaryRec.avoid.map((item: string, idx: number) => (
-              <View key={idx} style={styles.avoidItem}>
-                <Ionicons name="close-circle" size={18} color="#FF6B6B" />
-                <Text style={styles.avoidText}>{item}</Text>
+              <View key={idx} style={styles.row}>
+                <Ionicons name="close-circle" size={18} color={colors.error} />
+                <Text style={styles.rowText}>{item}</Text>
               </View>
             ))
           ) : (
@@ -78,11 +70,11 @@ export default function ProductsScreen() {
       <MotionView delay={200}>
         <Text style={styles.sectionTitle}>Pro Tips</Text>
         <View style={styles.card}>
-          {primaryRec && primaryRec.tips && primaryRec.tips.length > 0 ? (
+          {primaryRec?.tips?.length ? (
             primaryRec.tips.map((tip: string, idx: number) => (
-              <View key={idx} style={styles.tipItem}>
-                <Ionicons name="star" size={18} color={COLORS.primary} />
-                <Text style={styles.tipText}>{tip}</Text>
+              <View key={idx} style={styles.row}>
+                <Ionicons name="star" size={18} color={colors.primary} />
+                <Text style={styles.rowText}>{tip}</Text>
               </View>
             ))
           ) : (
@@ -94,37 +86,35 @@ export default function ProductsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: SPACING.m,
-  },
-  backBtn: { padding: SPACING.s, marginRight: SPACING.s },
-  title: { fontSize: 18, fontWeight: "700", color: COLORS.text },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: COLORS.text,
-    marginBottom: SPACING.s,
-  },
-  card: {
-    backgroundColor: COLORS.surface,
-    padding: SPACING.m,
-    borderRadius: RADIUS.m,
-  },
-  avoidItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: SPACING.s,
-  },
-  avoidText: { marginLeft: SPACING.s, color: COLORS.text },
-  tipItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: SPACING.s,
-  },
-  tipText: { marginLeft: SPACING.s, color: COLORS.text },
-  emptyText: { color: COLORS.textLight },
-});
+const createStyles = (colors: AppColors) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    headerRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: SPACING.m,
+    },
+    backBtn: { padding: SPACING.s, marginRight: SPACING.s },
+    title: { fontSize: 18, fontWeight: "700", color: colors.text },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: colors.text,
+      marginBottom: SPACING.s,
+    },
+    card: {
+      backgroundColor: colors.surface,
+      padding: SPACING.m,
+      borderRadius: RADIUS.m,
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginBottom: SPACING.l,
+    },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: SPACING.s,
+    },
+    rowText: { marginLeft: SPACING.s, color: colors.text, flex: 1 },
+    emptyText: { color: colors.textLight },
+  });

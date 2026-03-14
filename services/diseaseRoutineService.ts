@@ -15,6 +15,38 @@ export type DiseaseRecommendation = {
   consult: boolean; // should user consult a dermatologist?
 };
 
+const CONDITION_ALIASES: Record<string, string> = {
+  acne: "acne",
+  pimples: "acne",
+  pimple: "acne",
+  breakout: "acne",
+  breakouts: "acne",
+  dry: "dry",
+  dryness: "dry",
+  dryskin: "dry",
+  oily: "oily",
+  oiliness: "oily",
+  oilyskin: "oily",
+  wrinkle: "wrinkles",
+  wrinkles: "wrinkles",
+  fine_line: "wrinkles",
+  fine_lines: "wrinkles",
+  fineline: "wrinkles",
+  finelines: "wrinkles",
+  darkspot: "darkspots",
+  darkspots: "darkspots",
+  dark_spot: "darkspots",
+  dark_spots: "darkspots",
+  hyperpigmentation: "darkspots",
+  blackhead: "blackheads",
+  blackheads: "blackheads",
+  black_head: "blackheads",
+  black_heads: "blackheads",
+  normal: "normal",
+  healthy: "healthy",
+  healthyskin: "healthy",
+};
+
 // Comprehensive disease-to-routine mapping
 const DISEASE_RECOMMENDATIONS: Record<string, DiseaseRecommendation> = {
   // Acne
@@ -1011,6 +1043,26 @@ const DISEASE_RECOMMENDATIONS: Record<string, DiseaseRecommendation> = {
   },
 };
 
+function normalizeConditionKey(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+export function normalizeDetectedCondition(condition: string): string {
+  const normalizedKey = normalizeConditionKey(condition);
+  const squashedKey = normalizedKey.replace(/_/g, "");
+
+  return (
+    CONDITION_ALIASES[normalizedKey] ||
+    CONDITION_ALIASES[squashedKey] ||
+    normalizedKey
+  );
+}
+
 /**
  * Get routine steps for a list of detected conditions for a given phase.
  * Falls back to 'healthy' routines when no matching condition is found.
@@ -1027,7 +1079,7 @@ export function getRoutineStepsForPhase(
 
   // Try to find the first condition that has a recommendation
   for (const cond of detectedConditions) {
-    const key = cond.toLowerCase();
+    const key = normalizeDetectedCondition(cond);
     if (DISEASE_RECOMMENDATIONS[key]) {
       const rec = DISEASE_RECOMMENDATIONS[key];
       const r = rec.routines.find((r) => r.phase === phase);
@@ -1045,7 +1097,7 @@ export function getRoutineStepsForPhase(
  * Get personalized skincare recommendation based on detected disease
  */
 export function getRecommendation(diseaseName: string): DiseaseRecommendation {
-  const key = diseaseName.toLowerCase().replace(/\s+/g, "_");
+  const key = normalizeDetectedCondition(diseaseName);
 
   // Try exact match first
   if (DISEASE_RECOMMENDATIONS[key]) {
@@ -1053,7 +1105,7 @@ export function getRecommendation(diseaseName: string): DiseaseRecommendation {
   }
 
   // Try partial match for common disease names
-  for (const [dbKey, rec] of Object.entries(DISEASE_RECOMMENDATIONS)) {
+  for (const rec of Object.values(DISEASE_RECOMMENDATIONS)) {
     if (
       rec.disease.toLowerCase().includes(diseaseName.toLowerCase()) ||
       diseaseName.toLowerCase().includes(rec.disease.toLowerCase())
