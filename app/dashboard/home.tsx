@@ -43,6 +43,7 @@ export default function HomeScreen() {
     null,
   );
   const [lastCondition, setLastCondition] = useState<string | null>(null);
+  const [hasAnalysis, setHasAnalysis] = useState(false);
   const [routinePhase, setRoutinePhase] = useState<"morning" | "evening">(
     "morning",
   );
@@ -81,6 +82,7 @@ export default function HomeScreen() {
         try {
           const analyses = await getUserAnalysisHistory(1);
           if (analyses && analyses.length > 0) {
+            setHasAnalysis(true);
             const last = analyses[0] as SkinAnalysis;
             const cond =
               last.detectedConditions && last.detectedConditions.length > 0
@@ -91,11 +93,19 @@ export default function HomeScreen() {
             setLastHealthScore(last.healthScore ?? null);
             setLastRecommendations(last.recommendations || null);
           } else {
-            setLastCondition("healthy");
-            setLastRoutineSteps(getRoutineStepsForPhase([], phase));
+            setHasAnalysis(false);
+            setLastCondition(null);
+            setLastRoutineSteps(null);
+            setLastHealthScore(null);
+            setLastRecommendations(null);
           }
         } catch (error) {
           console.warn("[Home] Error loading last analysis:", error);
+          setHasAnalysis(false);
+          setLastCondition(null);
+          setLastRoutineSteps(null);
+          setLastHealthScore(null);
+          setLastRecommendations(null);
         }
       };
 
@@ -158,22 +168,27 @@ export default function HomeScreen() {
       <MotionView delay={150}>
         <Text style={styles.sectionTitle}>Today&apos;s Routine</Text>
         <View style={styles.routineCard}>
-          <Text style={styles.routineTitle}>
-            {routinePhase === "morning" ? "Morning" : "Evening"} routine -{" "}
-            {lastCondition || "General"}
-          </Text>
-          {lastRoutineSteps && lastRoutineSteps.length > 0 ? (
-            <View style={{ marginTop: SPACING.s }}>
-              {lastRoutineSteps.map((step, idx) => (
-                <Text key={idx} style={styles.routineStep}>
-                  {idx + 1}. {step}
-                </Text>
-              ))}
-            </View>
+          {hasAnalysis && lastRoutineSteps && lastRoutineSteps.length > 0 ? (
+            <>
+              <Text style={styles.routineTitle}>
+                {routinePhase === "morning" ? "Morning" : "Evening"} routine -{" "}
+                {lastCondition || "General"}
+              </Text>
+              <View style={{ marginTop: SPACING.s }}>
+                {lastRoutineSteps.map((step, idx) => (
+                  <Text key={idx} style={styles.routineStep}>
+                    {idx + 1}. {step}
+                  </Text>
+                ))}
+              </View>
+            </>
           ) : (
-            <Text style={styles.emptyRoutine}>
-              No recent routine available. Analyze your skin to generate a routine.
-            </Text>
+            <View style={{ marginTop: SPACING.s }}>
+              <Text style={styles.routineTitle}>No routine yet</Text>
+              <Text style={styles.emptyRoutine}>
+                Analyze your skin first to get a personalized routine and product recommendations.
+              </Text>
+            </View>
           )}
         </View>
       </MotionView>
@@ -191,6 +206,11 @@ export default function HomeScreen() {
           <TouchableOpacity
             style={[styles.card, { backgroundColor: colors.secondary }]}
             activeOpacity={0.9}
+            onPress={() => {
+              if (!hasAnalysis) {
+                router.push("/camera/capture");
+              }
+            }}
           >
             <View style={styles.cardIcon}>
               <Ionicons
@@ -204,15 +224,19 @@ export default function HomeScreen() {
                 {routinePhase === "morning" ? "Morning Routine" : "Evening Routine"}
               </Text>
               <Text style={styles.cardSubtitle}>
-                {lastCondition ? lastCondition : "General maintenance"}
+                {hasAnalysis ? (lastCondition ? lastCondition : "General maintenance") : "Analyze your skin first"}
               </Text>
-              {lastRoutineSteps && lastRoutineSteps.length > 0 && (
+              {hasAnalysis && lastRoutineSteps && lastRoutineSteps.length > 0 ? (
                 <View style={{ marginTop: SPACING.s }}>
                   <Text style={styles.cardSubtitle}>{`${lastRoutineSteps.length} steps`}</Text>
                   <Text style={[styles.cardSubtitle, { marginTop: 4 }]} numberOfLines={2}>
                     {lastRoutineSteps.slice(0, 2).join(" • ")}
                   </Text>
                 </View>
+              ) : (
+                <Text style={[styles.cardSubtitle, { marginTop: SPACING.s }]}>
+                  Complete your first scan to unlock your routine.
+                </Text>
               )}
             </View>
           </TouchableOpacity>
@@ -222,20 +246,32 @@ export default function HomeScreen() {
           <TouchableOpacity
             style={[styles.card, { backgroundColor: colors.card }]}
             activeOpacity={0.9}
-            onPress={() => router.push("/dashboard/products")}
+            onPress={() => {
+              if (hasAnalysis) {
+                router.push("/dashboard/products");
+              } else {
+                router.push("/camera/capture");
+              }
+            }}
           >
             <View style={styles.cardIcon}>
               <Ionicons name="flask" size={24} color={colors.text} />
             </View>
             <View>
               <Text style={styles.cardTitle}>Products</Text>
-              <Text style={styles.cardSubtitle}>View last analysis products</Text>
-              {lastRecommendations && lastRecommendations.length > 0 && (
+              <Text style={styles.cardSubtitle}>
+                {hasAnalysis ? "View last analysis products" : "Analyze your skin first"}
+              </Text>
+              {hasAnalysis && lastRecommendations && lastRecommendations.length > 0 ? (
                 <Text
                   style={[styles.cardSubtitle, { marginTop: SPACING.s }]}
                   numberOfLines={2}
                 >
                   {lastRecommendations[0]?.disease || "Recent analysis"}
+                </Text>
+              ) : (
+                <Text style={[styles.cardSubtitle, { marginTop: SPACING.s }]}>
+                  Products will appear after your first scan.
                 </Text>
               )}
             </View>
