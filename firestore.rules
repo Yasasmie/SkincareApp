@@ -1,0 +1,157 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isWhitelistedAdminEmail() {
+      return isAuthenticated() &&
+        request.auth.token.email in ["admin@admin.com"];
+    }
+
+    function isAdmin() {
+      return (isAuthenticated() && request.auth.token.admin == true) ||
+        isWhitelistedAdminEmail();
+    }
+
+    function currentUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isDermatologist() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        currentUserDoc().data.role == "dermatologist";
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid) || isAdmin();
+      allow update: if isAdmin() || (
+        isOwner(uid) &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(["admin", "status", "role", "isAdmin"])
+      );
+      allow delete: if isAdmin();
+
+      match /analyses/{analysisId} {
+        allow read, create: if isOwner(uid) || isAdmin();
+        allow update, delete: if isOwner(uid) || isAdmin();
+      }
+    }
+
+    match /analyses/{analysisId} {
+      allow read: if isAdmin() ||
+        (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /consultations/{consultationId} {
+      allow read: if isAdmin() ||
+        isDermatologist() ||
+        (isAuthenticated() && resource.data.uid == request.auth.uid);
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.uid == request.auth.uid;
+
+      allow update: if isAdmin() ||
+        (
+          isDermatologist() &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly([
+              "response",
+              "status",
+              "respondedBy",
+              "respondedByUid",
+              "responderQualifications",
+              "respondedAt",
+              "updatedAt"
+            ])
+        ) ||
+        (
+          isAuthenticated() &&
+          resource.data.uid == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly([
+              "title",
+              "description",
+              "detectedConditions",
+              "severity",
+              "updatedAt"
+            ]) &&
+          request.resource.data.response == resource.data.response &&
+          request.resource.data.respondedBy == resource.data.respondedBy &&
+          request.resource.data.respondedByUid == resource.data.respondedByUid &&
+          request.resource.data.responderQualifications == resource.data.responderQualifications &&
+          request.resource.data.respondedAt == resource.data.respondedAt &&
+          request.resource.data.status == resource.data.status
+        );
+
+      allow delete: if isAdmin() ||
+        (isAuthenticated() && resource.data.uid == request.auth.uid);
+    }
+
+    match /notifications/{notificationId} {
+      allow create: if isAuthenticated();
+      allow read: if isAdmin() ||
+        (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow update: if isAdmin() ||
+        (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    match /products/{productId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /routines/{routineId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /modelVersions/{versionId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /trainingDatasets/{datasetId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /modelFeedback/{feedbackId} {
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+      allow read: if isAdmin() ||
+        (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+
+    match /auditLogs/{logId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /securityEvents/{eventId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /dataPrivacyRequests/{requestId} {
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+      allow read: if isAdmin() ||
+        (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow update, delete: if isAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

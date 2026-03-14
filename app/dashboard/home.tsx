@@ -69,6 +69,10 @@ export default function HomeScreen() {
 
         try {
           const profile = await getUserProfileSafe();
+          if (profile.role === "dermatologist") {
+            router.replace("/expert-dashboard");
+            return;
+          }
           if (profile.name) setUserName(profile.name);
           setUserPhoto(
             getSafeProfilePhoto(profile.photoURL) ||
@@ -110,7 +114,7 @@ export default function HomeScreen() {
       };
 
       void fetchData();
-    }, []),
+    }, [router]),
   );
 
   return (

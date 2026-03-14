@@ -6,7 +6,8 @@ import { MotionView } from "../../components/MotionView";
 import { PrimaryButton } from "../../components/PrimaryButton";
 import { useAppTheme } from "../../components/ThemeProvider";
 import { AppColors, RADIUS, SPACING } from "../../constants/theme";
-import { createConsultationRequest, getUserConsultations, type ConsultationRequest } from "../../services/consultationService";
+import { createConsultationRequest, getConsultationDetails, getUserConsultations, type ConsultationRequest } from "../../services/consultationService";
+import { getUserProfileSafe } from "../../services/firebaseUserService";
 
 export default function ConsultationScreen() {
   const router = useRouter();
@@ -15,6 +16,7 @@ export default function ConsultationScreen() {
   const styles = createStyles(colors);
   const [mode, setMode] = useState<"list" | "create">("list");
   const [consultations, setConsultations] = useState<ConsultationRequest[]>([]);
+  const [selectedConsultation, setSelectedConsultation] = useState<ConsultationRequest | null>(null);
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -38,13 +40,54 @@ export default function ConsultationScreen() {
     }
   }, [params.conditions, params.description, params.mode, params.severity, params.title]);
 
+  useEffect(() => {
+    const consultationId =
+      typeof params.consultationId === "string" ? params.consultationId : "";
+
+    if (!consultationId) {
+      return;
+    }
+
+    const loadConsultation = async () => {
+      try {
+        const consultation = await getConsultationDetails(consultationId);
+        if (consultation) {
+          setSelectedConsultation(consultation);
+        }
+      } catch (error) {
+        console.error("[Consultation] Failed to load consultation detail:", error);
+      }
+    };
+
+    void loadConsultation();
+  }, [params.consultationId]);
+
   useFocusEffect(
     useCallback(() => {
-      if (mode !== "list") return;
       const load = async () => {
         try {
+          const profile = await getUserProfileSafe();
+          if (profile.role === "dermatologist") {
+            router.replace("/expert-dashboard");
+            return;
+          }
+
+          if (mode !== "list") {
+            return;
+          }
+
           setLoading(true);
-          setConsultations(await getUserConsultations());
+          const items = await getUserConsultations();
+          setConsultations(items);
+
+          const consultationId =
+            typeof params.consultationId === "string" ? params.consultationId : "";
+          if (consultationId) {
+            const matched = items.find((item) => item.id === consultationId);
+            if (matched) {
+              setSelectedConsultation(matched);
+            }
+          }
         } catch {
           Alert.alert("Error", "Failed to load consultations");
         } finally {
@@ -52,7 +95,7 @@ export default function ConsultationScreen() {
         }
       };
       void load();
-    }, [mode]),
+    }, [mode, params.consultationId, router]),
   );
 
   const handleSubmit = async () => {
@@ -94,6 +137,98 @@ export default function ConsultationScreen() {
     }
   };
 
+  if (mode === "list" && selectedConsultation) {
+    return (
+      <ScrollView style={styles.container} contentContainerStyle={styles.detailContent}>
+        <MotionView style={styles.header}>
+          <TouchableOpacity onPress={() => setSelectedConsultation(null)}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Consultation History</Text>
+          <View style={{ width: 24 }} />
+        </MotionView>
+
+        <View style={styles.detailCard}>
+          <View style={styles.detailTopRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.detailTitle}>{selectedConsultation.title}</Text>
+              <Text style={styles.detailDate}>
+                Submitted {new Date(selectedConsultation.createdAt).toLocaleString()}
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.statusBadge,
+                {
+                  backgroundColor:
+                    getStatusColor(selectedConsultation.status) + "20",
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.statusText,
+                  { color: getStatusColor(selectedConsultation.status) },
+                ]}
+              >
+                {selectedConsultation.status.charAt(0).toUpperCase() +
+                  selectedConsultation.status.slice(1)}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.detailMetaRow}>
+            <Text style={styles.detailMetaChip}>
+              Severity: {selectedConsultation.severity}
+            </Text>
+            {selectedConsultation.isUrgent ? (
+              <Text style={styles.urgentChip}>Urgent</Text>
+            ) : null}
+          </View>
+
+          <Text style={styles.detailSectionTitle}>Your Description</Text>
+          <Text style={styles.detailSectionText}>
+            {selectedConsultation.description}
+          </Text>
+
+          <Text style={styles.detailSectionTitle}>Conditions</Text>
+          <View style={styles.conditionsList}>
+            {selectedConsultation.detectedConditions.map((cond, i) => (
+              <View key={i} style={styles.conditionTag}>
+                <Text style={styles.conditionTagText}>{cond}</Text>
+              </View>
+            ))}
+          </View>
+
+          <Text style={styles.detailSectionTitle}>Expert Reply</Text>
+          {selectedConsultation.response ? (
+            <View style={styles.responseDetailBox}>
+              <Text style={styles.responseText}>{selectedConsultation.response}</Text>
+              <Text style={styles.responseMeta}>
+                {selectedConsultation.respondedBy || "Dermatologist"}
+                {selectedConsultation.responderQualifications
+                  ? ` • ${selectedConsultation.responderQualifications}`
+                  : ""}
+              </Text>
+              {selectedConsultation.respondedAt ? (
+                <Text style={styles.responseMeta}>
+                  Replied {new Date(selectedConsultation.respondedAt).toLocaleString()}
+                </Text>
+              ) : null}
+            </View>
+          ) : (
+            <View style={styles.pendingReplyBox}>
+              <Ionicons name="time-outline" size={20} color={colors.primary} />
+              <Text style={styles.pendingReplyText}>
+                Your consultation is waiting for a dermatologist reply.
+              </Text>
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    );
+  }
+
   if (mode === "list") {
     return (
       <View style={styles.container}>
@@ -116,7 +251,10 @@ export default function ConsultationScreen() {
             keyExtractor={(item) => item.id || ""}
             contentContainerStyle={styles.listContent}
             renderItem={({ item }) => (
-              <TouchableOpacity style={[styles.card, { borderLeftColor: getStatusColor(item.status) }]}>
+              <TouchableOpacity
+                style={[styles.card, { borderLeftColor: getStatusColor(item.status) }]}
+                onPress={() => setSelectedConsultation(item)}
+              >
                 <View style={styles.cardHeader}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.cardTitle}>{item.title}</Text>
@@ -142,6 +280,7 @@ export default function ConsultationScreen() {
                     <Text style={styles.responseText} numberOfLines={3}>{item.response}</Text>
                   </View>
                 )}
+                <Text style={styles.viewMoreText}>Tap to view full history</Text>
               </TouchableOpacity>
             )}
             ListEmptyComponent={
@@ -228,6 +367,7 @@ const createStyles = (colors: AppColors) =>
     header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: SPACING.l, paddingTop: SPACING.l, paddingBottom: SPACING.m },
     headerTitle: { fontSize: 20, fontWeight: "bold", color: colors.text },
     listContent: { paddingHorizontal: SPACING.l, paddingVertical: SPACING.m, paddingBottom: SPACING.xl },
+    detailContent: { paddingBottom: SPACING.xl },
     card: { backgroundColor: colors.surface, borderRadius: RADIUS.m, padding: SPACING.m, marginBottom: SPACING.m, borderLeftWidth: 4, borderWidth: 1, borderColor: colors.border },
     cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: SPACING.m },
     cardTitle: { fontSize: 15, fontWeight: "600", color: colors.text },
@@ -241,6 +381,8 @@ const createStyles = (colors: AppColors) =>
     responseBox: { marginTop: SPACING.m, paddingTop: SPACING.m, borderTopWidth: 1, borderTopColor: colors.border },
     responseLabel: { fontSize: 12, fontWeight: "600", color: colors.text, marginBottom: SPACING.s },
     responseText: { fontSize: 13, color: colors.textSecondary, lineHeight: 18 },
+    responseMeta: { fontSize: 12, color: colors.textSecondary, marginTop: SPACING.s, lineHeight: 18 },
+    viewMoreText: { marginTop: SPACING.m, color: colors.primary, fontWeight: "600", fontSize: 12 },
     emptyContainer: { alignItems: "center", justifyContent: "center", paddingVertical: 80 },
     emptyText: { fontSize: 16, fontWeight: "600", color: colors.text, marginTop: SPACING.m },
     emptySubtext: { fontSize: 13, color: colors.textSecondary, marginTop: SPACING.s, textAlign: "center" },
@@ -267,4 +409,78 @@ const createStyles = (colors: AppColors) =>
     infoText: { fontSize: 13, color: colors.text, lineHeight: 18 },
     footer: { paddingHorizontal: SPACING.l, paddingBottom: SPACING.xl, gap: SPACING.m },
     cancelText: { textAlign: "center", fontSize: 14, color: colors.textSecondary, marginTop: SPACING.m },
+    detailCard: {
+      marginHorizontal: SPACING.l,
+      backgroundColor: colors.card,
+      borderRadius: RADIUS.l,
+      padding: SPACING.l,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    detailTopRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      gap: SPACING.m,
+    },
+    detailTitle: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: colors.text,
+    },
+    detailDate: {
+      marginTop: SPACING.s,
+      color: colors.textSecondary,
+      fontSize: 12,
+    },
+    detailMetaRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: SPACING.s,
+      marginTop: SPACING.m,
+    },
+    detailMetaChip: {
+      backgroundColor: colors.surface,
+      color: colors.textSecondary,
+      borderRadius: 999,
+      overflow: "hidden",
+      paddingHorizontal: SPACING.m,
+      paddingVertical: SPACING.s,
+      fontSize: 12,
+    },
+    detailSectionTitle: {
+      marginTop: SPACING.l,
+      fontSize: 14,
+      fontWeight: "700",
+      color: colors.text,
+    },
+    detailSectionText: {
+      marginTop: SPACING.s,
+      color: colors.textSecondary,
+      lineHeight: 20,
+    },
+    responseDetailBox: {
+      marginTop: SPACING.s,
+      backgroundColor: colors.primary + "10",
+      borderRadius: RADIUS.m,
+      padding: SPACING.m,
+      borderWidth: 1,
+      borderColor: colors.primary + "30",
+    },
+    pendingReplyBox: {
+      marginTop: SPACING.s,
+      borderRadius: RADIUS.m,
+      padding: SPACING.m,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      flexDirection: "row",
+      gap: SPACING.s,
+      alignItems: "center",
+    },
+    pendingReplyText: {
+      flex: 1,
+      color: colors.textSecondary,
+      lineHeight: 20,
+    },
   });

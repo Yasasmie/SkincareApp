@@ -26,11 +26,21 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [skinType, setSkinType] = useState("Normal");
+  const [accountType, setAccountType] = useState<"user" | "dermatologist">("user");
+  const [qualifications, setQualifications] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSignUp = async () => {
     if (!email || !password || !fullName) {
       Alert.alert("Missing Info", "Please fill in all fields.");
+      return;
+    }
+
+    if (accountType === "dermatologist" && !qualifications.trim()) {
+      Alert.alert(
+        "Missing Info",
+        "Please enter your dermatologist qualifications.",
+      );
       return;
     }
 
@@ -43,10 +53,14 @@ export default function RegisterScreen() {
 
       await setDoc(doc(db, "users", user.uid), {
         uid: user.uid,
+        name: fullName,
         fullName,
         email,
-        skinType,
-        createdAt: new Date().toISOString(),
+        skinType: accountType === "user" ? skinType : null,
+        role: accountType,
+        qualifications: accountType === "dermatologist" ? qualifications.trim() : null,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
         photoURL: null,
       });
 
@@ -74,6 +88,48 @@ export default function RegisterScreen() {
     </TouchableOpacity>
   );
 
+  const AccountTypeOption = ({
+    type,
+    label,
+    icon,
+  }: {
+    type: "user" | "dermatologist";
+    label: string;
+    icon: keyof typeof Ionicons.glyphMap;
+  }) => (
+    <TouchableOpacity
+      onPress={() => setAccountType(type)}
+      style={[
+        styles.accountTypeCard,
+        accountType === type && styles.accountTypeCardSelected,
+      ]}
+    >
+      <Ionicons
+        name={icon}
+        size={20}
+        color={accountType === type ? "#FFF" : colors.primary}
+      />
+      <Text
+        style={[
+          styles.accountTypeTitle,
+          accountType === type && styles.accountTypeTitleSelected,
+        ]}
+      >
+        {label}
+      </Text>
+      <Text
+        style={[
+          styles.accountTypeSubtitle,
+          accountType === type && styles.accountTypeSubtitleSelected,
+        ]}
+      >
+        {type === "user"
+          ? "Track your skin and request expert help"
+          : "Review consultations and reply as an expert"}
+      </Text>
+    </TouchableOpacity>
+  );
+
   return (
     <ScrollView
       style={styles.container}
@@ -90,6 +146,18 @@ export default function RegisterScreen() {
       </MotionView>
 
       <MotionView delay={100} style={styles.form}>
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Register As</Text>
+          <View style={styles.accountTypeRow}>
+            <AccountTypeOption type="user" label="User" icon="person-outline" />
+            <AccountTypeOption
+              type="dermatologist"
+              label="Dermatologist"
+              icon="medkit-outline"
+            />
+          </View>
+        </View>
+
         <View style={styles.inputContainer}>
           <Text style={styles.label}>Full Name</Text>
           <TextInput
@@ -126,17 +194,41 @@ export default function RegisterScreen() {
           />
         </View>
 
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>What&apos;s your skin type?</Text>
-          <View style={styles.optionsRow}>
-            {["Oily", "Dry", "Normal", "Combination"].map((type) => (
-              <SkinTypeOption key={type} type={type} />
-            ))}
+        {accountType === "user" ? (
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>What&apos;s your skin type?</Text>
+            <View style={styles.optionsRow}>
+              {["Oily", "Dry", "Normal", "Combination"].map((type) => (
+                <SkinTypeOption key={type} type={type} />
+              ))}
+            </View>
           </View>
-        </View>
+        ) : (
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Qualifications</Text>
+            <TextInput
+              style={[styles.input, styles.textarea]}
+              placeholder="MBBS, MD Dermatology, years of experience..."
+              placeholderTextColor={colors.textSecondary}
+              value={qualifications}
+              onChangeText={setQualifications}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+          </View>
+        )}
 
         <View style={{ height: 20 }} />
-        <PrimaryButton title="Sign Up" onPress={handleSignUp} loading={loading} />
+        <PrimaryButton
+          title={
+            accountType === "dermatologist"
+              ? "Register as Dermatologist"
+              : "Sign Up"
+          }
+          onPress={handleSignUp}
+          loading={loading}
+        />
 
         <TouchableOpacity
           onPress={() => router.push("/auth/login")}
@@ -190,6 +282,32 @@ const createStyles = (colors: AppColors) =>
       borderColor: colors.border,
     },
     inputContainer: { marginBottom: SPACING.m },
+    accountTypeRow: { gap: SPACING.m },
+    accountTypeCard: {
+      backgroundColor: colors.surface,
+      borderRadius: RADIUS.m,
+      padding: SPACING.m,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    accountTypeCardSelected: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    accountTypeTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: colors.text,
+      marginTop: SPACING.s,
+    },
+    accountTypeTitleSelected: { color: "#FFF" },
+    accountTypeSubtitle: {
+      fontSize: 12,
+      color: colors.textLight,
+      marginTop: 4,
+      lineHeight: 18,
+    },
+    accountTypeSubtitleSelected: { color: "rgba(255,255,255,0.85)" },
     label: {
       fontSize: 14,
       color: colors.text,
@@ -204,6 +322,10 @@ const createStyles = (colors: AppColors) =>
       color: colors.text,
       borderWidth: 1,
       borderColor: colors.border,
+    },
+    textarea: {
+      minHeight: 96,
+      paddingTop: SPACING.m,
     },
     optionsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
     option: {

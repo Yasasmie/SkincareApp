@@ -11,11 +11,14 @@ import {
     where,
 } from "firebase/firestore";
 import { auth, db } from "../firebaseConfig";
+import { getUserProfileSafe } from "./firebaseUserService";
+import { createNotification } from "./notificationService";
 
 export type ConsultationRequest = {
   id?: string;
   uid: string;
   email: string;
+  userName?: string;
   title: string;
   description: string;
   detectedConditions: string[];
@@ -24,6 +27,8 @@ export type ConsultationRequest = {
   status: "pending" | "in-progress" | "resolved" | "closed";
   response?: string;
   respondedBy?: string;
+  respondedByUid?: string;
+  responderQualifications?: string;
   respondedAt?: number;
   createdAt: number;
   updatedAt: number;
@@ -44,10 +49,12 @@ export async function createConsultationRequest(
 
   try {
     const now = Date.now();
+    const profile = await getUserProfileSafe();
     const consultationData: ConsultationRequest = {
       ...data,
       uid: user.uid,
       email: user.email || "",
+      userName: profile.fullName || profile.name || user.displayName || "User",
       status: "pending",
       createdAt: now,
       updatedAt: now,
@@ -81,27 +88,50 @@ export async function getUserConsultations(): Promise<ConsultationRequest[]> {
   if (!user) throw new Error("No user logged in");
 
   try {
-    const q = query(
-      collection(db, "consultations"),
-      where("uid", "==", user.uid),
-      orderBy("createdAt", "desc"),
-    );
+    try {
+      const q = query(
+        collection(db, "consultations"),
+        where("uid", "==", user.uid),
+        orderBy("createdAt", "desc"),
+      );
 
-    const snapshot = await getDocs(q);
-    const consultations = snapshot.docs.map(
-      (doc) =>
-        ({
-          id: doc.id,
-          ...doc.data(),
-        }) as ConsultationRequest,
-    );
+      const snapshot = await getDocs(q);
+      const consultations = snapshot.docs.map(
+        (doc) =>
+          ({
+            id: doc.id,
+            ...doc.data(),
+          }) as ConsultationRequest,
+      );
 
-    console.log(
-      "[Consultation] Retrieved",
-      consultations.length,
-      "consultations",
-    );
-    return consultations;
+      console.log(
+        "[Consultation] Retrieved",
+        consultations.length,
+        "consultations",
+      );
+      return consultations;
+    } catch (indexedQueryError) {
+      console.warn(
+        "[Consultation] Indexed history query failed, falling back:",
+        indexedQueryError,
+      );
+
+      const fallbackQuery = query(
+        collection(db, "consultations"),
+        where("uid", "==", user.uid),
+      );
+      const snapshot = await getDocs(fallbackQuery);
+
+      return snapshot.docs
+        .map(
+          (doc) =>
+            ({
+              id: doc.id,
+              ...doc.data(),
+            }) as ConsultationRequest,
+        )
+        .sort((a, b) => b.createdAt - a.createdAt);
+    }
   } catch (error) {
     console.error("[Consultation] Error fetching consultations:", error);
     return [];
@@ -135,6 +165,24 @@ export async function getPendingConsultations(): Promise<
       "[Consultation] Error fetching pending consultations:",
       error,
     );
+    return [];
+  }
+}
+
+export async function getAllConsultations(): Promise<ConsultationRequest[]> {
+  try {
+    const q = query(collection(db, "consultations"), orderBy("createdAt", "desc"));
+    const snapshot = await getDocs(q);
+
+    return snapshot.docs.map(
+      (doc) =>
+        ({
+          id: doc.id,
+          ...doc.data(),
+        }) as ConsultationRequest,
+    );
+  } catch (error) {
+    console.error("[Consultation] Error fetching all consultations:", error);
     return [];
   }
 }
@@ -177,14 +225,28 @@ export async function respondToConsultation(
   if (!user) throw new Error("No user logged in");
 
   try {
+    const profile = await getUserProfileSafe();
+    const consultation = await getConsultationDetails(consultationId);
     const docRef = doc(db, "consultations", consultationId);
     await updateDoc(docRef, {
       response,
       status,
-      respondedBy: user.email,
+      respondedBy: profile.fullName || profile.name || user.email,
+      respondedByUid: user.uid,
+      responderQualifications: profile.qualifications || null,
       respondedAt: Date.now(),
       updatedAt: Date.now(),
     });
+
+    if (consultation?.uid) {
+      await createNotification({
+        userId: consultation.uid,
+        title: "Dermatologist replied",
+        message: `Your consultation "${consultation.title}" has a new expert reply.`,
+        type: "consultation_reply",
+        consultationId,
+      });
+    }
 
     console.log(
       "[Consultation] Response added to consultation:",

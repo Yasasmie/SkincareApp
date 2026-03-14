@@ -17,12 +17,15 @@ export type UserProfile = {
   uid: string;
   email: string;
   name: string;
+  fullName?: string;
   age?: number;
   gender?: "male" | "female" | "other";
   skinType?: "oily" | "dry" | "combination" | "normal" | "sensitive";
   skinConcerns?: string[];
   photoURL?: string;
   photoData?: string;
+  role?: "user" | "dermatologist";
+  qualifications?: string;
   createdAt: number;
   updatedAt: number;
   isAdmin?: boolean;
@@ -44,11 +47,14 @@ export async function createOrUpdateUserProfile(
     uid: user.uid,
     email: user.email || "",
     name: user.displayName || userData.name || "User",
+    fullName: user.displayName || userData.fullName || userData.name || "User",
     age: userData.age,
     gender: userData.gender,
     skinType: userData.skinType,
     skinConcerns: userData.skinConcerns || [],
     photoURL: user.photoURL || userData.photoURL,
+    role: userData.role || "user",
+    qualifications: userData.qualifications,
     createdAt: userData.createdAt || now,
     updatedAt: now,
     isAdmin: userData.isAdmin || false,
@@ -80,6 +86,7 @@ export async function getUserProfile(): Promise<UserProfile | null> {
       console.log("[UserService] Creating new profile");
       return await createOrUpdateUserProfile({
         name: user.displayName || "User",
+        fullName: user.displayName || "User",
         email: user.email || "",
       });
     }
@@ -123,8 +130,10 @@ export async function getUserProfileSafe(): Promise<UserProfile> {
         uid: user.uid,
         email: user.email || "",
         name: user.displayName || "User",
+        fullName: user.displayName || "User",
         createdAt: Date.now(),
         updatedAt: Date.now(),
+        role: "user",
       };
     }
   } catch (error: any) {
@@ -137,8 +146,10 @@ export async function getUserProfileSafe(): Promise<UserProfile> {
       uid: user.uid,
       email: user.email || "",
       name: user.displayName || "User",
+      fullName: user.displayName || "User",
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      role: "user",
     };
   }
 }
@@ -206,6 +217,11 @@ export async function getUserByEmail(
 export async function isUserAdmin(): Promise<boolean> {
   const profile = await getUserProfile();
   return profile?.isAdmin || false;
+}
+
+export async function isUserDermatologist(): Promise<boolean> {
+  const profile = await getUserProfile();
+  return profile?.role === "dermatologist";
 }
 
 /**

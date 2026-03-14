@@ -16,6 +16,7 @@ import {
 import { useAppTheme } from "../../components/ThemeProvider";
 import { AppColors, RADIUS, SPACING } from "../../constants/theme";
 import { auth, db } from "../../firebaseConfig";
+import { getCurrentUserNotifications } from "../../services/notificationService";
 
 function getSafeProfilePhoto(photo: string | null | undefined): string | null {
   if (!photo) {
@@ -36,6 +37,7 @@ export default function ProfileScreen() {
   const [userData, setUserData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [imageLoadError, setImageLoadError] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
@@ -58,6 +60,8 @@ export default function ProfileScreen() {
             email: user.email,
             photo: getSafeProfilePhoto(user.photoURL),
             skinType: "Not Set",
+            role: "user",
+            qualifications: "",
           };
 
           if (isMounted) {
@@ -73,6 +77,8 @@ export default function ProfileScreen() {
             if (docSnap.exists()) {
               const firestoreData = docSnap.data();
               data.skinType = firestoreData.skinType || "Not Set";
+              data.role = firestoreData.role || "user";
+              data.qualifications = firestoreData.qualifications || "";
               if (firestoreData.fullName) data.name = firestoreData.fullName;
               if (firestoreData.photoURL) {
                 data.photo = getSafeProfilePhoto(firestoreData.photoURL);
@@ -87,6 +93,15 @@ export default function ProfileScreen() {
             }
           } catch (firestoreError) {
             console.log("Firestore offline/error, showing basic auth data only:", firestoreError);
+          }
+
+          try {
+            const notifications = await getCurrentUserNotifications();
+            if (isMounted) {
+              setUnreadNotifications(notifications.filter((item) => !item.read).length);
+            }
+          } catch (notificationError) {
+            console.log("Notification load failed:", notificationError);
           }
         } catch (error) {
           console.error("Critical Profile Error:", error);
@@ -191,10 +206,28 @@ export default function ProfileScreen() {
           <View style={styles.infoRow}>
             <Ionicons name="water-outline" size={20} color={colors.primary} />
             <View style={styles.infoBody}>
-              <Text style={styles.infoLabel}>Skin Type</Text>
-              <Text style={styles.infoValue}>{userData?.skinType}</Text>
+              <Text style={styles.infoLabel}>
+                {userData?.role === "dermatologist" ? "Account Type" : "Skin Type"}
+              </Text>
+              <Text style={styles.infoValue}>
+                {userData?.role === "dermatologist"
+                  ? "Dermatologist"
+                  : userData?.skinType}
+              </Text>
             </View>
           </View>
+          {userData?.role === "dermatologist" && !!userData?.qualifications ? (
+            <>
+              <View style={styles.divider} />
+              <View style={styles.infoRow}>
+                <Ionicons name="school-outline" size={20} color={colors.primary} />
+                <View style={styles.infoBody}>
+                  <Text style={styles.infoLabel}>Qualifications</Text>
+                  <Text style={styles.infoValue}>{userData?.qualifications}</Text>
+                </View>
+              </View>
+            </>
+          ) : null}
         </View>
 
         <Text style={styles.sectionHeader}>Activity</Text>
@@ -205,12 +238,25 @@ export default function ProfileScreen() {
             onPress={() => router.push("/dashboard/history")}
           />
           <View style={styles.divider} />
-          <MenuItem
-            icon="medical"
-            label="Expert Help"
-            onPress={() => router.push("/dashboard/consultation")}
-          />
-          <View style={styles.divider} />
+          {userData?.role === "dermatologist" ? (
+            <>
+              <MenuItem
+                icon="medkit"
+                label="Expert Dashboard"
+                onPress={() => router.push("/expert-dashboard")}
+              />
+              <View style={styles.divider} />
+            </>
+          ) : (
+            <>
+              <MenuItem
+                icon="medical"
+                label="Expert Help"
+                onPress={() => router.push("/dashboard/consultation")}
+              />
+              <View style={styles.divider} />
+            </>
+          )}
           <MenuItem
             icon="settings-outline"
             label="Settings"
@@ -222,8 +268,12 @@ export default function ProfileScreen() {
         <View style={styles.card}>
           <MenuItem
             icon="notifications-outline"
-            label="Notifications"
-            onPress={() => Alert.alert("Info", "Notifications settings.")}
+            label={
+              unreadNotifications > 0
+                ? `Notifications (${unreadNotifications})`
+                : "Notifications"
+            }
+            onPress={() => router.push("/dashboard/notifications")}
           />
           <View style={styles.divider} />
           <MenuItem

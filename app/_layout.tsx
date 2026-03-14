@@ -9,8 +9,11 @@ export default function RootLayout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="auth/login" />
         <Stack.Screen name="auth/register" />
+        <Stack.Screen name="expert-dashboard" />
         <Stack.Screen name="dashboard/home" />
+        <Stack.Screen name="dashboard/expert" />
         <Stack.Screen name="dashboard/profile" />
+        <Stack.Screen name="dashboard/notifications" />
         <Stack.Screen name="dashboard/history" />
         <Stack.Screen name="dashboard/consultation" />
         <Stack.Screen name="dashboard/settings" />
